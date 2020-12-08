@@ -407,25 +407,132 @@ exports.handler = function (event, context, callback)
 		});
 
 		//--- GET OBJECT DATA FROM MYDS AND BACK UP
-		//Now that you have data - save to your own data store - ie AWS S3, DynamoDB ....
-		//You can use settings.local to store your own parameters
+		// Now that you have the tracking data - you search for the data you want to save to your own data store - ie AWS S3, DynamoDB ....
+		// You can use settings.local to store your own parameters
+		// You can similar methods as used at https://learn.mydigitalstructure.cloud/schema to get available fields etc
 
 		mydigitalstructure.add(
-		{
-			name: 'continuity-backup-object-data',
-			notes: 'This is the code you use to get data and save to your local code',
-			code: function (data, error)
+		[
 			{
-				var trackingProcessData = mydigitalstructure.get(
+				name: 'continuity-backup-object-data',
+				notes: 'This is the code you use to get data and save to your local code',
+				code: function (param, response)
 				{
-					scope: 'continuity-get-tracking-data-process'
-				});
+					var trackingProcessData = mydigitalstructure.get(
+					{
+						scope: 'continuity-get-tracking-data-process',
+						context: 'data'
+					});
 
-				mydigitalstructure.invoke('util-end');
+					var trackingProcessDataByObject = _.groupBy(trackingProcessData, function (data) {return data.object});
 
-				//When done call: mydigitalstructure.invoke('continuity-set-last-backup-date');
+					var trackingBackups = [];
+
+					_.each(trackingProcessDataByObject, function (objectData, object)
+					{
+						trackingBackups.push(
+						{
+							object: object,
+							objectcontexts: _.join(_.map(objectData, function (_objectData) {return _objectData.objectcontext}), ',')
+						})
+					});
+
+					mydigitalstructure._util.message(
+					[
+						'Tracking backups:',
+						trackingBackups
+					]);
+
+					mydigitalstructure.set(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups',
+						value: trackingBackups
+					});
+
+					mydigitalstructure.set(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups-index',
+						value: 0
+					});
+
+					mydigitalstructure.invoke('continuity-backup-object-data-process')
+				}
+			},
+			{
+				name: 'continuity-backup-object-data-process',
+				code: function (param, response)
+				{
+					var index = mydigitalstructure.get(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups-index'
+					});
+
+					var trackingBackups = mydigitalstructure.get(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups'
+					});
+
+					if (index < trackingBackups.length)
+					{
+						var trackingBackup = trackingBackups[index];
+
+						// Can use CORE_OBJECT_SEARCH &advancedsearchmethod to get method details to get data
+						// In this example it is coded.
+
+						var searchData =
+						{
+							callback: 'continuity-backup-object-data-next',
+							callbackParam: param,
+							rows: 9999999
+						};
+
+						if (trackingBackup.object == 32)
+						{
+							searchData.object = 'contact_person';
+							searchData.fields = 
+							[
+								{name: 'firstname'},
+								{name: 'surname'},
+								{name: 'email'}
+							]
+						}
+
+						mydigitalstructure.cloud.search(searchData);
+					}
+					else
+					{
+						//For testing; mydigitalstructure.invoke('util-end');
+						mydigitalstructure.invoke('continuity-set-last-backup-date');
+					}
+				}
+			},
+			{
+				name: 'continuity-backup-object-data-next',
+				code: function (param, response)
+				{
+					//use response object to save your data
+
+					var index = mydigitalstructure.get(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups-index'
+					});
+
+					mydigitalstructure.set(
+					{
+						scope: 'continuity-backup-object-data',
+						context: 'tracking-backups-index',
+						value: (index + 1)
+					});
+
+					mydigitalstructure.invoke('continuity-backup-object-data-process')
+				}
 			}
-		});
+		]);
 
 		mydigitalstructure.invoke('continuity-start');
 	}
