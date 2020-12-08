@@ -13,16 +13,11 @@
 	lambda-local -l index.js -t 9000 -e event-continuity-get-last-backup-date.json
 	 - Get last back up date
 
+	lambda-local -l index.js -t 9000 -e event-continuity-reset-last-backup-date.json
+	 - Reset last back up date
+
 	lambda-local -l index.js -t 9000 -e event-continuity-get-tracking-data.json
 	 - Get tracking data
-
-	Dependancies:
-
-	# Port scanner:
-	https://www.npmjs.com/package/evilscan
-
-	# DNS Look up:
-	https://www.npmjs.com/package/dns-lookup
 
 	Notes:
 
@@ -39,6 +34,18 @@ exports.handler = function (event, context, callback)
 	{
 		scope: '_event',
 		value: event
+	});
+
+	mydigitalstructure.set(
+	{
+		scope: '_context',
+		value: context
+	});
+
+	mydigitalstructure.set(
+	{
+		scope: '_callback',
+		value: callback
 	});
 
 	mydigitalstructure.init(main);
@@ -89,7 +96,7 @@ exports.handler = function (event, context, callback)
 					mydigitalstructure.cloud.search(
 					{
 						object: 'setup_space_settings',
-						fields: 'datatrackinglastbackupdate',
+						fields: [{ name: 'datatrackinglastbackupdate' }],
 						callback: 'continuity-get-last-backup-date-response',
 						callbackParam: param
 					});
@@ -101,11 +108,19 @@ exports.handler = function (event, context, callback)
 				{
 					if (response.status == 'OK')
 					{
+						mydigitalstructure.set(
+						{
+							scope: 'continuity',
+							context: 'space-settings',
+							value: _.first(response.data.rows)
+						});
+
 						var lastBackupDate = mydigitalstructure.set(
 						{
 							scope: 'continuity-get-last-backup-date',
+							context: 'last-backup-date',
 							value: _.first(response.data.rows).datatrackinglastbackupdate
-						}
+						});
 
 						mydigitalstructure._util.message(
 						[
@@ -113,6 +128,21 @@ exports.handler = function (event, context, callback)
 							'Last backup date:',
 							lastBackupDate
 						]);
+
+						var onComplete = mydigitalstructure._util.param.get(param, 'onComplete').value;
+
+						if (onComplete != undefined)
+						{
+							mydigitalstructure._util.onComplete(param);
+						}
+						else
+						{
+							mydigitalstructure.invoke('util-end',
+							{
+								status: 'OK',
+								lastBackupDate: lastBackupDate
+							});
+						}
 					}
 				}
 			}
@@ -126,25 +156,226 @@ exports.handler = function (event, context, callback)
 				name: 'continuity-get-tracking-data',
 				code: function (param)
 				{
+					mydigitalstructure.invoke('continuity-get-last-backup-date',
+					{
+						onComplete: 'continuity-get-tracking-data-process'
+					})
+				}
+			},
+			{
+				name: 'continuity-get-tracking-data-process',
+				code: function (param)
+				{
 					var settings = mydigitalstructure.get(
 					{
 						scope: '_settings'
 					});
+
+					//use for settings.continuity.objects.include / exclude
+
+					var lastBackupDate = mydigitalstructure.get(
+					{
+						scope: 'continuity-get-last-backup-date',
+						context: 'last-backup-date'
+					});
+
+					var filters = [];
+
+					if (settings.continuity.filters != undefined)
+					{
+						filters = _.concat(filters, settings.continuity.filters)
+					}
+
+					if (lastBackupDate != '' && lastBackupDate != undefined)
+					{
+						filters.push(
+						{
+							field: 'modifieddate',
+							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							value: lastBackupDate
+						})
+					}
+
+					mydigitalstructure.cloud.search(
+					{
+						object: 'core_data_tracking',
+						fields:
+						[
+							{name: 'object'},
+							{name: 'objecttext'},
+							{name: 'objectcontext'},
+							{name: 'modifieddate'},
+							{name: 'modifieduser'},
+							{name: 'modifiedusertext'},
+							{name: 'session'},
+							{name: 'guid'}
+						],
+						filters: filters,
+						sorts: [{name: 'id', direction: 'asc'}],
+						callback: 'continuity-get-tracking-data-process-response',
+						callbackParam: param
+					});
 				}
 			},
 			{
-				name: 'continuity-get-tracking-data-response',
+				name: 'continuity-get-tracking-data-process-response',
 				code: function (param, response)
 				{
 					if (response.status == 'OK')
-					{}
+					{
+						var trackingData = mydigitalstructure.set(
+						{
+							scope: 'continuity-get-tracking-data-process',
+							context: 'data',
+							value: response.data.rows
+						});
 
-					//Now that you have data - save to your own data store - ie AWS S3, DynamoDB ....
+						mydigitalstructure.set(
+						{
+							scope: 'continuity-get-tracking-data-process',
+							context: 'data-count',
+							value: response.data.rows.length
+						});
+
+						mydigitalstructure._util.message(
+						[
+							'-',
+							'Tracking Data:',
+							trackingData
+						]);
+
+						var lastTrackingData;
+
+						if (trackingData.length != 0)
+						{
+							lastTrackingData = _.last(trackingData)
+						}
+
+						var trackingLastBackupDate = mydigitalstructure.set(
+						{
+							scope: 'continuity-get-tracking-data-process',
+							context: 'last-backup-date',
+							value: lastTrackingData.modifieddate
+						});
+					}
+
+					mydigitalstructure.invoke('continuity-set-last-backup-date');
 				}
 			}
 		]);
 
-	
+		//--- GET OBJECT DATA FROM MYDS
+		//Now that you have data - save to your own data store - ie AWS S3, DynamoDB ....
+		//You can use settings.local to store your own parameters
+
+		//--- SET LAST BACKUP REFERENCE DATE ON YOUR SPACE SETTINGS
+
+		mydigitalstructure.add(
+		[
+			{
+				name: 'continuity-set-last-backup-date',
+				code: function (param)
+				{
+					var trackingLastBackupDate = mydigitalstructure.get(
+					{
+						scope: 'continuity-get-tracking-data-process',
+						context: 'last-backup-date'
+					});
+
+					if (trackingLastBackupDate != undefined)
+					{
+						var spaceSettings = mydigitalstructure.get(
+						{
+							scope: 'continuity',
+							context: 'space-settings'
+						});
+
+						mydigitalstructure.cloud.save(
+						{
+							object: 'setup_space_settings',
+							data:
+							{ 
+								id: spaceSettings.id,
+								datatrackinglastbackupdate: trackingLastBackupDate
+							},
+							callback: 'continuity-set-last-backup-date-response',
+							callbackParam: param
+						});
+					}
+				}
+			},
+			{
+				name: 'continuity-set-last-backup-date-response',
+				code: function (param, response)
+				{
+					if (response.status == 'OK')
+					{
+						var onComplete = mydigitalstructure._util.param.get(param, 'onComplete').value;
+
+						if (onComplete != undefined)
+						{
+							mydigitalstructure._util.onComplete(param);
+						}
+						else
+						{
+							mydigitalstructure.invoke('util-end');
+						}
+					}
+				}
+			}
+		]);
+
+		//--- RESET LAST BACKUP REFERENCE DATE ON YOUR SPACE SETTINGS
+
+		mydigitalstructure.add(
+		{
+			name: 'continuity-reset-last-backup-date',
+			code: function (param)
+			{
+				mydigitalstructure.cloud.save(
+				{
+					object: 'setup_space_settings',
+					data:
+					{ 
+						datatrackinglastbackupdate: ''
+					}
+				});
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'util-end',
+			code: function (data, error)
+			{
+				var callback = mydigitalstructure.get(
+				{
+					scope: '_callback'
+				});
+
+				if (error == undefined) {error = null}
+
+				if (data == undefined)
+				{
+					var trackingProcessData = mydigitalstructure.get(
+					{
+						scope: 'continuity-get-tracking-data-process'
+					});
+
+					data =
+					{
+						status: 'OK',
+						trackingDataCount: trackingProcessData['data-count'],
+						trackingLastBackupDate: trackingProcessData['last-backup-date']
+					}
+				}
+
+				if (callback != undefined)
+				{
+					callback(error, data);
+				}
+			}
+		});
 
 		mydigitalstructure.invoke('continuity-start');
 	}
