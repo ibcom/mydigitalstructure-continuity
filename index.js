@@ -202,7 +202,7 @@ exports.handler = function (event, context, callback)
 						filters.push(
 						{
 							field: 'modifieddate',
-							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							comparison: 'GREATER_THAN',
 							value: lastBackupDate
 						});
 					}
@@ -281,15 +281,16 @@ exports.handler = function (event, context, callback)
 
 						if (trackingData.length != 0)
 						{
-							lastTrackingData = _.last(trackingData)
+							lastTrackingData = _.last(trackingData);
+							var lastBackupDate = lastTrackingData.modifieddate;
+						
+							var trackingLastBackupDate = mydigitalstructure.set(
+							{
+								scope: 'continuity-get-tracking-data-process',
+								context: 'last-backup-date',
+								value: lastBackupDate
+							});
 						}
-
-						var trackingLastBackupDate = mydigitalstructure.set(
-						{
-							scope: 'continuity-get-tracking-data-process',
-							context: 'last-backup-date',
-							value: lastTrackingData.modifieddate
-						});
 					}
 
 					mydigitalstructure.invoke('continuity-backup-object-data');
@@ -490,8 +491,6 @@ exports.handler = function (event, context, callback)
 							rows: 9999999
 						};
 
-						//ADD ID FILTERS
-
 						if (trackingBackup.object == 32)
 						{
 							searchData.object = 'contact_person';
@@ -500,6 +499,14 @@ exports.handler = function (event, context, callback)
 								{name: 'firstname'},
 								{name: 'surname'},
 								{name: 'email'}
+							];
+							searchData.filters =
+							[
+								{
+									name: 'id',
+									comparison: 'IN_LIST',
+									values: searchData.objectcontexts
+								}
 							]
 						}
 
