@@ -19,6 +19,9 @@
 	lambda-local -l index.js -t 9000 -e event-continuity-get-tracking-data.json
 	 - Get tracking data
 
+	lambda-local -l index.js -t 9000 -e event-continuity-backup-object-data.json
+	 - !!! The main controller that does the back up
+	
 	Notes:
 
 	# context: this the context of the lambda job runtime info
@@ -62,6 +65,11 @@ exports.handler = function (event, context, callback)
 					scope: '_event'
 				});
 
+				var settings = mydigitalstructure.get(
+				{
+					scope: '_settings'
+				});
+
 				var controller;
 
 				if (_.isObject(event))
@@ -76,6 +84,9 @@ exports.handler = function (event, context, callback)
 						'-',
 						'Using mydigitalstructure module version ' + mydigitalstructure.VERSION,
 						'-',
+						'Settings:',
+						settings,
+						'-',
 						'Based on event data invoking controller:',
 						controller
 					]);
@@ -85,7 +96,7 @@ exports.handler = function (event, context, callback)
 			}
 		});
 
-		//--- GET LAST BACKUP REFERENCE DATE FROM YOUR SPACE SETTINGS
+		//--- GET LAST BACKUP REFERENCE DATE FROM YOUR MYDIGITALSTRUCTURE.CLOUD SPACE SETTINGS
 
 		mydigitalstructure.add(
 		[
@@ -148,7 +159,7 @@ exports.handler = function (event, context, callback)
 			}
 		]);
 
-		//--- GET TRACKING DATA FROM MYDS
+		//--- GET TRACKING DATA FROM MYDIGITALSTRUCTURE.CLOUD
 
 		mydigitalstructure.add(
 		[
@@ -193,7 +204,29 @@ exports.handler = function (event, context, callback)
 							field: 'modifieddate',
 							comparison: 'GREATER_THAN_OR_EQUAL_TO',
 							value: lastBackupDate
-						})
+						});
+					}
+
+					if (settings.continuity.objects != undefined)
+					{
+						if (settings.continuity.objects.include != undefined)
+						{
+							filters.push(
+							{
+								field: 'object',
+								comparison: 'IN_LIST',
+								value: settings.continuity.objects.include
+							});
+						}
+						else if (settings.continuity.objects.exclude != undefined)
+						{
+							filters.push(
+							{
+								field: 'object',
+								comparison: 'NOT_IN_LIST',
+								value: settings.continuity.objects.exclude
+							});
+						}
 					}
 
 					mydigitalstructure.cloud.search(
@@ -259,16 +292,12 @@ exports.handler = function (event, context, callback)
 						});
 					}
 
-					mydigitalstructure.invoke('continuity-set-last-backup-date');
+					mydigitalstructure.invoke('continuity-backup-object-data');
 				}
 			}
 		]);
 
-		//--- GET OBJECT DATA FROM MYDS
-		//Now that you have data - save to your own data store - ie AWS S3, DynamoDB ....
-		//You can use settings.local to store your own parameters
-
-		//--- SET LAST BACKUP REFERENCE DATE ON YOUR SPACE SETTINGS
+		//--- SET LAST BACKUP REFERENCE DATE ON YOUR SPACE SETTINGS IN MYDIGITALSTRUCTURE.CLOUD
 
 		mydigitalstructure.add(
 		[
@@ -374,6 +403,27 @@ exports.handler = function (event, context, callback)
 				{
 					callback(error, data);
 				}
+			}
+		});
+
+		//--- GET OBJECT DATA FROM MYDS AND BACK UP
+		//Now that you have data - save to your own data store - ie AWS S3, DynamoDB ....
+		//You can use settings.local to store your own parameters
+
+		mydigitalstructure.add(
+		{
+			name: 'continuity-backup-object-data',
+			notes: 'This is the code you use to get data and save to your local code',
+			code: function (data, error)
+			{
+				var trackingProcessData = mydigitalstructure.get(
+				{
+					scope: 'continuity-get-tracking-data-process'
+				});
+
+				mydigitalstructure.invoke('util-end');
+
+				//When done call: mydigitalstructure.invoke('continuity-set-last-backup-date');
 			}
 		});
 
