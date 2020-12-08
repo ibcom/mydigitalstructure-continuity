@@ -1,0 +1,32 @@
+{
+    "name": "mydigitalstructure-isms",
+    "version": "1.0.1",
+    "licence": [
+        {
+            "type": "MIT",
+            "url": "https://github.com/ibcom/mydigitalstructure-isms/raw/master/LICENSE"
+        }
+    ],
+    "description": "mydigitalstructure-isms",
+    "preferGlobal": "true",
+    "main": "app.js",
+    "bin": {},
+    "author": "Mark Byers",
+    "keywords": [
+        "mydigitalstructure ISMS"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ibcom/mydigitalstructure-isms.git"
+    },
+    "dependencies": {
+        "dns-lookup": "^0.1.0",
+        "lodash": "^4.17.20",
+        "moment": "^2.29.1",
+        "mydigitalstructure": "^2.1.8",
+        "portscanner": "^2.2.0"
+    },
+    "engines": {
+        "node": "*"
+    }
+}
