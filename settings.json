@@ -1,0 +1,32 @@
+{
+	"mydigitalstructure":
+	{
+		"hostname": "api.mydigitalstructure.cloud",
+		"logon": "x", 
+		"password": "x", 
+		"email": "x",
+		"testing": 
+		{
+			"status": "true",
+			"showData": "true",
+			"break": "-"
+		},
+		"convert": "true"
+	},
+	"continuity":
+	{
+		"alert":
+		{
+			"default":
+			{
+				"email": "x"
+			}
+		},
+		"objects":
+		{
+			"include": "12,32"
+		},
+		"local": {}
+	}
+
+}	

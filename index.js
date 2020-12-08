@@ -490,6 +490,8 @@ exports.handler = function (event, context, callback)
 							rows: 9999999
 						};
 
+						//ADD ID FILTERS
+
 						if (trackingBackup.object == 32)
 						{
 							searchData.object = 'contact_person';
