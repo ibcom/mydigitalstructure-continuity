@@ -25,6 +25,8 @@
 	Notes:
 
 	# context: this the context of the lambda job runtime info
+
+	# Save to dynamoDB
 */
 
 exports.handler = function (event, context, callback)
